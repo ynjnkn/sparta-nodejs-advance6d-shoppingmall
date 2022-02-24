@@ -9,8 +9,7 @@ const { Op } = require("sequelize");
 const authMiddleware = require("./middlewares/auth-middleware");
 
 // [Models]
-const { User, Goods } = require("./models");
-const Cart = require("./models/cart");
+const { User, Goods, Cart } = require("./models");
 
 mongoose.connect("mongodb://localhost/shopping-demo", {
     useNewUrlParser: true,
@@ -175,26 +174,28 @@ router.get("/goods", authMiddleware, async (req, res) => {
 router.get("/goods/cart", authMiddleware, async (req, res) => {
     const { userId } = res.locals.user;
 
-    const cart = await Cart.find({
-        userId,
-    }).exec();
+    const cart = await Cart.findAll({
+        where: {
+            userId,
+        },
+    });
 
     const goodsIds = cart.map((c) => c.goodsId);
 
     // 루프 줄이기 위해 Mapping 가능한 객체로 만든것
-    const goodsKeyById = await Goods.find({
-        _id: { $in: goodsIds },
-    })
-        .exec()
-        .then((goods) =>
-            goods.reduce(
-                (prev, g) => ({
-                    ...prev,
-                    [g.goodsId]: g,
-                }),
-                {}
-            )
-        );
+    const goodsKeyById = await Goods.findAll({
+        where: {
+            goodsId: goodsIds,
+        },
+    }).then((goods) =>
+        goods.reduce(
+            (prev, g) => ({
+                ...prev,
+                [g.goodsId]: g,
+            }),
+            {}
+        )
+    );
 
     res.send({
         cart: cart.map((c) => ({
@@ -225,20 +226,21 @@ router.put("/goods/:goodsId/cart", authMiddleware, async (req, res) => {
     const { quantity } = req.body;
 
     const existsCart = await Cart.findOne({
-        userId,
-        goodsId,
-    }).exec();
+        where: {
+            userId,
+            goodsId,
+        },
+    });
 
     if (existsCart) {
         existsCart.quantity = quantity;
         await existsCart.save();
     } else {
-        const cart = new Cart({
+        await Cart.create({
             userId,
             goodsId,
             quantity,
         });
-        await cart.save();
     }
 
     // NOTE: 성공했을때 응답 값을 클라이언트가 사용하지 않는다.
@@ -252,13 +254,15 @@ router.delete("/goods/:goodsId/cart", authMiddleware, async (req, res) => {
     const { goodsId } = req.params;
 
     const existsCart = await Cart.findOne({
-        userId,
-        goodsId,
-    }).exec();
+        where: {
+            userId,
+            goodsId,
+        },
+    });
 
     // 있든 말든 신경 안쓴다. 그냥 있으면 지운다.
     if (existsCart) {
-        existsCart.delete();
+        await existsCart.destroy();
     }
 
     // NOTE: 성공했을때 딱히 정해진 응답 값이 없다.

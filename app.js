@@ -9,8 +9,7 @@ const { Op } = require("sequelize");
 const authMiddleware = require("./middlewares/auth-middleware");
 
 // [Models]
-const { User } = require("./models");
-const Goods = require("./models/goods");
+const { User, Goods } = require("./models");
 const Cart = require("./models/cart");
 
 mongoose.connect("mongodb://localhost/shopping-demo", {
@@ -125,12 +124,48 @@ router.get("/users/me", authMiddleware, async (req, res) => {
 });
 
 
+// [API] 상품 추가
+router.post("/goods", async (req, res) => {
+    const { name, thumbnail, category, price } = req.body;
+
+    await Goods.create({ name, thumbnail, category, price });
+
+    res.send("상품 추가 API 실행");
+});
+
+// [API] 상품 삭제
+router.delete("/goods/:goodsId", async (req, res) => {
+    const { goodsId } = req.params;
+
+    const goods = await Goods.findOne({
+        where: { goodsId: { [Op.eq]: goodsId } }
+    });
+
+    if (!goods) {
+        return res.send("삭제하려는 상품이 없습니다.");
+    }
+
+    Goods.destroy({
+        where: {
+            goodsId: {
+                [Op.eq]: goodsId
+            }
+        }
+    });
+
+    console.log("goods", goods.dataValues);
+
+    return res.send("상품 삭제 API 실행");
+});
+
 // [API] 모든 상품 목록 조회
 router.get("/goods", authMiddleware, async (req, res) => {
     const { category } = req.query;
-    const goods = await Goods.find(category ? { category } : undefined)
-        .sort("-date")
-        .exec();
+
+    const goods = await Goods.findAll({
+        order: ["goodsId"],
+        where: category ? { category } : undefined,
+    });
 
     res.send({ goods });
 });
@@ -173,7 +208,7 @@ router.get("/goods/cart", authMiddleware, async (req, res) => {
 // [API] 상품 상세 조회
 router.get("/goods/:goodsId", authMiddleware, async (req, res) => {
     const { goodsId } = req.params;
-    const goods = await Goods.findById(goodsId).exec();
+    const goods = await Goods.findByPk(goodsId);
 
     if (!goods) {
         res.status(404).send({});

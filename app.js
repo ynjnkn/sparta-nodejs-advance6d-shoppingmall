@@ -3,12 +3,13 @@ const express = require("express");
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
 const joi = require("joi");
+const { Op } = require("sequelize");
 
 // [Middlewares]
 const authMiddleware = require("./middlewares/auth-middleware");
 
 // [Models]
-const User = require("./models/user");
+const { User } = require("./models");
 const Goods = require("./models/goods");
 const Cart = require("./models/cart");
 
@@ -38,9 +39,12 @@ router.post("/users", async (req, res) => {
     try {
         const { nickname, email, password, confirmPassword } = await postUsersSchema.validateAsync(req.body);
 
-        const users = await User.find({}).exec();
-        const existingNicknameUser = await User.findOne({ nickname }).exec();
-        const existingEmailUser = await User.findOne({ email }).exec();
+        const existingNicknameUser = await User.findOne({
+            where: { nickname: { [Op.eq]: nickname } }
+        });
+        const existingEmailUser = await User.findOne({
+            where: { email: { [Op.eq]: email } }
+        });
 
         if (password !== confirmPassword) {
             return res.status(400).send({
@@ -58,13 +62,8 @@ router.post("/users", async (req, res) => {
             });
         }
         else {
-            const newUser = new User({
-                nickname,
-                email,
-                password,
-            })
-            await newUser.save();
-            return res.status(201).send({});
+            await User.create({ email, nickname, password });
+            return res.status(201).send("회원가입 성공");
         };
     }
     catch (err) {
@@ -84,7 +83,11 @@ const postAuthSchema = joi.object({
 router.post("/auth", async (req, res) => {
     try {
         const { email, password } = await postAuthSchema.validateAsync(req.body);
-        const user = await User.findOne({ email, password }).exec();
+        const user = await User.findOne({
+            where: {
+                email: { [Op.eq]: email }
+            },
+        });
 
         if (!user || password != user.password) {
             return res

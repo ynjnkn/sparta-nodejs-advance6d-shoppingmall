@@ -13,27 +13,63 @@ const { User, Goods, Cart } = require("./models");
 const userRouter = require("./routes/user");
 const goodsRouter = require("./routes/goods");
 
+
+// [Functions]
+const socketIdMap = {};
+function emitSamePageViewerCount() {
+    const countByUrl = Object.values(socketIdMap).reduce((accumulatedUrl, url) => {
+        return {
+            ...accumulatedUrl,
+            [url]: accumulatedUrl[url] ? accumulatedUrl[url] + 1 : 1,
+        };
+    }, {});
+
+    // console.log("countByUrl", countByUrl);
+
+    for (const [socketId, url] of Object.entries(socketIdMap)) {
+        const count = countByUrl[url];
+        io.to(socketId).emit("SAME_PAGE_VIEWER_COUNT", count);
+    }
+};
+
 const app = express();
 const http = Server(app);
-const io = socketIo(http);
+const io = socketIo(http, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"],
+    }
+});
 const router = express.Router();
 
+// [Socket.IO]
 io.on("connection", (socket) => {
-    console.log("새로운 소켓 연결");
+    socketIdMap[socket.id] = null;
+    // console.log("새로운 소켓 연결");
 
-    socket.emit("BUY_GOODS", {
-        nickname: "allnighter01",
-        goodsId: 1,
-        goodsName: "인테이크 슈가로로 복숭아 무설탕 탄산음로 스파클링 350ml (24개입)",
-        date: "2022-02-24",
-    });
+    socket.on("CHANGED_PAGE", (data) => {
+        console.log("페이지 전환 실행", data, socket.id);
+        socketIdMap[socket.id] = data;
+        // console.log("socketIdMap 업데이트", socketIdMap);
 
-    socket.on("disconnect", () => {
-        console.log(socket.id, "연결이 끊어졌어요!");
+        emitSamePageViewerCount();
     });
 
     socket.on("BUY", (data) => {
-        console.log(data);
+        const payload = {
+            nickname: data.nickname,
+            goodsId: data.goodsId,
+            goodsName: data.goodsName,
+            date: new Date().toISOString(),
+        };
+        console.log("클라이언트가 구매한 데이터", data, new Date());
+        socket.broadcast.emit("BUY_GOODS", payload);
+    });
+
+    socket.on("disconnect", () => {
+        delete socketIdMap[socket.id];
+        console.log(socket.id, "소켓 연결 해제");
+        emitSamePageViewerCount();
     });
 });
 
